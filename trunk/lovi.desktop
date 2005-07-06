@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=0.1
+Encoding=UTF-8
+Name=lovi
+GenericName=Logfile Monitor
+Exec=lovi %f
+Comment=
+Icon=lovi
+MimeType=text/plain;text/x-log
+DocPath=lovi/index.html
+Terminal=false
+Categories=Qt;KDE;System;X-KDE-More
