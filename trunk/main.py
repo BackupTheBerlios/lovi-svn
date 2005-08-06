@@ -36,17 +36,39 @@ copyright holder.
 import datetime
 import os
 import sys
-from qt import QGridLayout, QLabel, QLineEdit, QPopupMenu, Qt, QTabWidget, \
-    QTextEdit, QTimer, QWhatsThis, QWidget, SIGNAL
-from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, KIcon, \
-    KIconLoader
-from kdeui import KDialogBase, KMainWindow, KMessageBox, KStdAction
+from qt import QFont, QGridLayout, QLabel, QLineEdit, QPopupMenu, QSize, Qt, \
+    QTabWidget, QTextEdit, QTimer, QWhatsThis, QWidget, SIGNAL
+from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, \
+    KConfigSkeleton, KIcon, KIconLoader
+from kdeui import KConfigDialog, KDialogBase, KMainWindow, KMessageBox, \
+    KStdAction
 from kfile import KFileDialog
 
 def makeCaption(title):
     """Create a standard window caption"""
     return KApplication.kApplication().makeStdCaption(i18n(title))
     
+class LoviConfig:
+
+    """Configuration singleton"""
+
+    class LoviConfig_(KConfigSkeleton):
+        """Configuration information""" 
+        def __init__(self):
+            KConfigSkeleton.__init__(self, "loviConfig")
+            self.font = QFont()
+            self.setCurrentGroup("Font")
+            self.addItemFont("Font", self.font, QFont())
+
+    instance_ = None
+
+    def __init__(self):
+        if LoviConfig.instance_ is None:
+            LoviConfig.instance_ = self.LoviConfig_()
+            
+    def instance(self):
+        return LoviConfig.instance_
+
 class Tail:
 
     """File monitor. Based on code contributed to Python Cookbook 
@@ -406,28 +428,21 @@ class MainWin(KMainWindow):
         cfg.setGroup("Monitor")
         cfg.writeEntry("files", files)
         
-class SettingsDlg(KDialogBase):
+class SettingsDlg(KConfigDialog):
     
     """Settings dialog"""
     
     def __init__(self, parent):
-        KDialogBase.__init__(self, parent, "settings", False, 
-            makeCaption("Configure"), \
-            KDialogBase.Ok | KDialogBase.Cancel, \
-            KDialogBase.Ok, True)
-    
-        page = self.makeVBoxMainWidget();
-
-        # making 'page' the parent inserts the widgets in
-        # the VBox created above
-        label = QLabel("hi", page, "caption" );
-
-        label0 = QLabel("Border widths", page)
-        a, b, c, d = self.getBorderWidths ()
-        labelA = QLabel("Upper Left X: " + str (a), page)
-        labelB = QLabel("Upper Left Y: " + str (b), page)
-        labelC = QLabel("Lower Right X: " + str (c), page)
-        labelD = QLabel("Lower Right Y: " + str (d), page)
+        KConfigDialog.__init__(self, parent, "settings",
+            LoviConfig().instance(), KDialogBase.IconList,
+            KDialogBase.Ok | KDialogBase.Apply | KDialogBase.Cancel)
+        font = QWidget(None, "font")
+        filters = QWidget(None, "filters")
+        actions = QWidget(None, "actions")
+        self.addPage(font, i18n("Font"), "fonts")
+        self.addPage(filters, i18n("Filters"), "2downarrow")
+        self.addPage(actions, i18n("Actions"), "kalarm")
+        self.setMinimumSize(QSize(400, 400))
 
 def main():
 
@@ -435,7 +450,7 @@ def main():
 
     description = str(i18n("Simple log file viewer"))
     version = "0.2"
-    about = KAboutData("lovi", "lovi", version, description, \
+    about = KAboutData("lovi", "lovi", version, description,
         KAboutData.License_GPL, "(C) 2005 Akos Polster")
     about.addAuthor("Akos Polster", "", "akos@pipacs.com")
     KCmdLineArgs.init(sys.argv, about)
