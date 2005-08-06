@@ -36,14 +36,16 @@ copyright holder.
 import datetime
 import os
 import sys
-import time
-from qt import QGridLayout, QIconSet, QLabel, QPixmap, QPopupMenu, \
-    QPushButton, Qt, QTabWidget, QTextEdit, QTimer, QWhatsThis, QWidget, \
-    SIGNAL
+from qt import QGridLayout, QLabel, QLineEdit, QPopupMenu, Qt, QTabWidget, \
+    QTextEdit, QTimer, QWhatsThis, QWidget, SIGNAL
 from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, KIcon, \
     KIconLoader
-from kdeui import KAction, KActionMenu, KMainWindow, KMessageBox, KStdAction
+from kdeui import KDialogBase, KMainWindow, KMessageBox, KStdAction
 from kfile import KFileDialog
+
+def makeCaption(title):
+    """Create a standard window caption"""
+    return KApplication.kApplication().makeStdCaption(i18n(title))
     
 class Tail:
 
@@ -134,10 +136,10 @@ class Monitor(QWidget):
 
     MAX_LOG_LINES = 5000
     
-    def __init__(self, parent, tailer, filter = None):
+    def __init__(self, parent, tailer, fltr = None):
         QWidget.__init__(self, parent, "")
         self.tailer = tailer
-        self.filter = filter
+        self.filter = fltr
         self.log = QTextEdit(self)
         layout = QGridLayout(self, 1, 1)
         layout.addWidget(self.log, 0, 0)
@@ -213,12 +215,12 @@ class MainWin(KMainWindow):
         }
         self.currentPage = None
         self.tab = QTabWidget(self)
+        self.settingsDlg = SettingsDlg(self)
         self.setCentralWidget(self.tab)
         self.connect(self.tab, SIGNAL("currentChanged(QWidget *)"), 
             self.onPageChange)
         self.setGeometry(0, 0, 600, 400)
-        self.setCaption(KApplication.kApplication().
-            makeStdCaption(i18n("(none)")))
+        self.setCaption(makeCaption("(none)"))
 
         # Timers
         self.timer = QTimer(self)
@@ -246,6 +248,7 @@ class MainWin(KMainWindow):
         self.addBookmarkAction = \
             KStdAction.addBookmark(self.onAddBookmark, actions)
         self.addBookmarkAction.setEnabled(False)
+        self.settingsAction = KStdAction.preferences(self.onSettings, actions)
         
         # Initialize menus
         
@@ -259,10 +262,14 @@ class MainWin(KMainWindow):
         editMenu = QPopupMenu(self)
         self.copyAction.plug(editMenu)
         self.clearAction.plug(editMenu)
-        self.menuBar().insertItem(i18n("&Edit"), editMenu)
         editMenu.insertSeparator()
         self.selectAllAction.plug(editMenu)
         self.addBookmarkAction.plug(editMenu)
+        self.menuBar().insertItem(i18n("&Edit"), editMenu)
+        
+        settingsMenu = QPopupMenu(self)
+        self.settingsAction.plug(settingsMenu)
+        self.menuBar().insertItem(i18n("&Settings"), settingsMenu)
         
         helpMenu = self.helpMenu("")
         self.menuBar().insertItem(i18n("&Help"), helpMenu)
@@ -295,7 +302,6 @@ class MainWin(KMainWindow):
     
     def onClose(self, id = -1):
         """Close a monitored file."""
-        oldCurrent = self.currentPage
         self.monitors.remove(self.currentPage)
         self.currentPage.close()
         self.tab.removePage(self.currentPage)
@@ -303,8 +309,7 @@ class MainWin(KMainWindow):
         self.updateConfig()
         if len(self.monitors) == 0:
             # Update interface when the last page is deleted
-            self.setCaption(KApplication.kApplication().
-                makeStdCaption(i18n("(none)")))
+            self.setCaption(makeCaption("(none)"))
             self.closeAction.setEnabled(False)
             self.copyAction.setEnabled(False)
             self.selectAllAction.setEnabled(False)
@@ -334,11 +339,14 @@ class MainWin(KMainWindow):
         bookmark += "-------------------------------------------------</font>"
         self.currentPage.getTextWidget().append(bookmark)
     
+    def onSettings(self, id = -1):
+        """Display settings dialog"""
+        self.settingsDlg.show()
+        
     def onPageChange(self, page):
         """Update widget when the top level tab changes."""
         self.currentPage = page
-        self.setCaption(KApplication.kApplication().
-            makeStdCaption(os.path.basename(page.getFileName())))
+        self.setCaption(makeCaption(os.path.basename(page.getFileName())))
         self.copyAction.setEnabled(page.getTextWidget().hasSelectedText())
                         
     def onStatusTimeout(self):
@@ -377,7 +385,7 @@ class MainWin(KMainWindow):
         self.tab.addTab(mon, base)
         self.tab.showPage(mon)
         self.currentPage = mon
-        self.setCaption(KApplication.kApplication().makeStdCaption(base))
+        self.setCaption(makeCaption(base))
         self.displayStatus(False, str(i18n("Monitoring %s")) % fileName)
         self.connect(self.timer, SIGNAL("timeout()"), mon.follow)
         self.updateConfig()
@@ -397,13 +405,36 @@ class MainWin(KMainWindow):
         cfg = KApplication.kApplication().config()
         cfg.setGroup("Monitor")
         cfg.writeEntry("files", files)
+        
+class SettingsDlg(KDialogBase):
+    
+    """Settings dialog"""
+    
+    def __init__(self, parent):
+        KDialogBase.__init__(self, parent, "settings", False, 
+            makeCaption("Configure"), \
+            KDialogBase.Ok | KDialogBase.Cancel, \
+            KDialogBase.Ok, True)
+    
+        page = self.makeVBoxMainWidget();
+
+        # making 'page' the parent inserts the widgets in
+        # the VBox created above
+        label = QLabel("hi", page, "caption" );
+
+        label0 = QLabel("Border widths", page)
+        a, b, c, d = self.getBorderWidths ()
+        labelA = QLabel("Upper Left X: " + str (a), page)
+        labelB = QLabel("Upper Left Y: " + str (b), page)
+        labelC = QLabel("Lower Right X: " + str (c), page)
+        labelD = QLabel("Lower Right Y: " + str (d), page)
 
 def main():
 
     """Main program."""
 
     description = str(i18n("Simple log file viewer"))
-    version = "0.1"
+    version = "0.2"
     about = KAboutData("lovi", "lovi", version, description, \
         KAboutData.License_GPL, "(C) 2005 Akos Polster")
     about.addAuthor("Akos Polster", "", "akos@pipacs.com")
