@@ -36,39 +36,19 @@ copyright holder.
 import datetime
 import os
 import sys
-from qt import QFont, QGridLayout, QLabel, QLineEdit, QPopupMenu, QSize, Qt, \
-    QTabWidget, QTextEdit, QTimer, QWhatsThis, QWidget, SIGNAL
+from qt import QButtonGroup, QFont, QFrame, QGridLayout, QLabel, QLineEdit, \
+    QPopupMenu, QRadioButton, QSize, QStringList, Qt, QTabWidget, QTextEdit, \
+    QTimer, QVBoxLayout, QVButtonGroup, QWhatsThis, QWidget, SIGNAL
 from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, \
     KConfigSkeleton, KIcon, KIconLoader
-from kdeui import KConfigDialog, KDialogBase, KMainWindow, KMessageBox, \
-    KStdAction
+from kdeui import KConfigDialog, KDialogBase, KFontChooser, KMainWindow, \
+    KMessageBox, KStdAction
 from kfile import KFileDialog
 
 def makeCaption(title):
     """Create a standard window caption"""
     return KApplication.kApplication().makeStdCaption(i18n(title))
     
-class LoviConfig:
-
-    """Configuration singleton"""
-
-    class LoviConfig_(KConfigSkeleton):
-        """Configuration information""" 
-        def __init__(self):
-            KConfigSkeleton.__init__(self, "loviConfig")
-            self.font = QFont()
-            self.setCurrentGroup("Font")
-            self.addItemFont("Font", self.font, QFont())
-
-    instance_ = None
-
-    def __init__(self):
-        if LoviConfig.instance_ is None:
-            LoviConfig.instance_ = self.LoviConfig_()
-            
-    def instance(self):
-        return LoviConfig.instance_
-
 class Tail:
 
     """File monitor. Based on code contributed to Python Cookbook 
@@ -399,7 +379,7 @@ class MainWin(KMainWindow):
         except:
             KMessageBox.error(self, 
                 str(i18n("Cannot open file for monitoring:\n%s")) % 
-                    fileName, i18n("Error - lovi"))
+                    fileName, makeCaption("Error"))
             return
         mon = Monitor(self.tab, tailer, self.filter)
         base = os.path.basename(fileName)
@@ -428,21 +408,61 @@ class MainWin(KMainWindow):
         cfg.setGroup("Monitor")
         cfg.writeEntry("files", files)
         
+class LoviConfig:
+
+    """Configuration singleton"""
+
+    class LoviConfig_(KConfigSkeleton):
+        """Configuration information""" 
+        def __init__(self):
+            KConfigSkeleton.__init__(self, "lovirc")
+
+            self.setCurrentGroup("Font")
+            self.fontDefault = self.addItemInt("fontDefault", 1)
+            self.fontFixed = self.addItemInt("fontFixed", 0)
+            self.fontCustom = self.addItemInt("fontCustom", 0)
+
+    instance_ = None
+
+    def __init__(self):
+        if LoviConfig.instance_ is None:
+            LoviConfig.instance_ = self.LoviConfig_()
+            
+    def getInstance(self):
+        return LoviConfig.instance_
+
 class SettingsDlg(KConfigDialog):
     
     """Settings dialog"""
     
     def __init__(self, parent):
+        
         KConfigDialog.__init__(self, parent, "settings",
-            LoviConfig().instance(), KDialogBase.IconList,
+            LoviConfig().getInstance(), KDialogBase.IconList, 
             KDialogBase.Ok | KDialogBase.Apply | KDialogBase.Cancel)
-        font = QWidget(None, "font")
+            
+        font = QWidget(self, "Font")
+        box = QVBoxLayout(font, 3, 3)
+        fontGrp = QVButtonGroup("", font)
+        fontGrp.setFrameStyle(QFrame.NoFrame)
+        kcfg_fontDefault = \
+            QRadioButton(i18n("Default font"), fontGrp, "kcfg_fontDefault")
+        kcfg_fontFixed = \
+            QRadioButton(i18n("Default fixed font"), fontGrp, "kcfg_fontFixed")
+        kcfg_fontCustom = \
+            QRadioButton(i18n("Custom:"), fontGrp, "kcfg_fontCustom")
+        fontGrp.setExclusive(True)
+        box.addWidget(fontGrp)
+        fontChooser = KFontChooser(font, "", False, QStringList(), False)
+        box.addWidget(fontChooser)
+        
         filters = QWidget(None, "filters")
+
         actions = QWidget(None, "actions")
+
         self.addPage(font, i18n("Font"), "fonts")
         self.addPage(filters, i18n("Filters"), "2downarrow")
-        self.addPage(actions, i18n("Actions"), "kalarm")
-        self.setMinimumSize(QSize(400, 400))
+        self.addPage(actions, i18n("Alarms"), "kalarm")
 
 def main():
 
