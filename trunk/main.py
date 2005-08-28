@@ -212,7 +212,7 @@ class MainWin(KMainWindow):
         self.lastDir = "/var/log"
         self.monitors = []
         self.filter = {
-            "errors": ["error", "fail"], 
+            "errors": ["error", "fail", "badness"], 
             "warnings": ["warning", "cannot", "can't", "unable"]
         }
         self.currentPage = None
@@ -343,6 +343,8 @@ class MainWin(KMainWindow):
     
     def onSettings(self, id = -1):
         """Display settings dialog"""
+        if KConfigDialog.showDialog("settings"):
+            return
         self.settingsDlg.show()
         
     def onPageChange(self, page):
@@ -414,13 +416,13 @@ class LoviConfig:
 
     class LoviConfig_(KConfigSkeleton):
         """Configuration information""" 
-        def __init__(self):
-            KConfigSkeleton.__init__(self, "lovirc")
-
+        def __init__(self, *args):
+            KConfigSkeleton.__init__(self, *args)
             self.setCurrentGroup("Font")
-            self.fontDefault = self.addItemInt("fontDefault", 1)
-            self.fontFixed = self.addItemInt("fontFixed", 0)
-            self.fontCustom = self.addItemInt("fontCustom", 0)
+            self.fontDefault = self.addItemBool("fontDefault", True)
+            self.fontFixed = self.addItemBool("fontFixed", False)
+            self.fontCustom = self.addItemBool("fontCustom", False)
+            self.readConfig()
 
     instance_ = None
 
