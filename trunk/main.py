@@ -37,8 +37,8 @@ import datetime
 import os
 import sys
 from qt import QButtonGroup, QFont, QFrame, QGridLayout, QLabel, QLineEdit, \
-    QPopupMenu, QRadioButton, QSize, QStringList, Qt, QTabWidget, QTextEdit, \
-    QTimer, QVBoxLayout, QVButtonGroup, QWhatsThis, QWidget, SIGNAL
+    QPopupMenu, QRadioButton, QSize, QString, QStringList, Qt, QTabWidget, \
+    QTextEdit, QTimer, QVBoxLayout, QVButtonGroup, QWhatsThis, QWidget, SIGNAL
 from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, \
     KConfigSkeleton, KIcon, KIconLoader
 from kdeui import KConfigDialog, KDialogBase, KFontChooser, KMainWindow, \
@@ -138,10 +138,10 @@ class Monitor(QWidget):
 
     MAX_LOG_LINES = 5000
     
-    def __init__(self, parent, tailer, fltr = None):
+    def __init__(self, parent, tailer):
         QWidget.__init__(self, parent, "")
         self.tailer = tailer
-        self.filter = fltr
+        self.cfg = LoviConfig().getInstance()
         self.log = QTextEdit(self)
         layout = QGridLayout(self, 1, 1)
         layout.addWidget(self.log, 0, 0)
@@ -149,8 +149,8 @@ class Monitor(QWidget):
         self.log.setMaxLogLines(Monitor.MAX_LOG_LINES)
         self.follow()
         QWhatsThis.add(self.log, 
-        str(i18n("<qt>This page is monitoring changes to <b>%s</b></qt>")) 
-            % self.tailer.getFileName())
+            str(i18n("<qt>This page is monitoring changes to <b>%s</b></qt>")) 
+                % self.tailer.getFileName())
         
     def follow(self):
 
@@ -159,18 +159,17 @@ class Monitor(QWidget):
         for line in self.tailer.follow():
             hasErrors = False
             hasWarnings = False
-            if self.filter:
-                loLine = line.lower()
-                for err in self.filter["errors"]:
-                    if loLine.find(err.lower()) != -1:
-                        hasErrors = True
+            loLine = line.lower()
+            for err in self.cfg.filterErrorList:
+                if loLine.find(err.lower()) != -1:
+                    hasErrors = True
+                    break
+            if not hasErrors:
+                for warn in self.cfg.filterWarningList:
+                    if loLine.find(warn.lower()) != -1:
+                        hasWarnings = True
                         break
-                if not hasErrors:
-                    for warn in self.filter["warnings"]:
-                        if loLine.find(warn.lower()) != -1:
-                            hasWarnings = True
-                            break
-            line = line.replace("<", "&lt;")
+            line = line.replace("<", "&lt;").replace(">", "&gt;")
             if hasErrors:
                 line = '<font color="red">' + line + '</font>'
             elif hasWarnings:
@@ -209,15 +208,14 @@ class MainWin(KMainWindow):
 
     def __init__(self, *args):
         apply(KMainWindow.__init__, (self,) + args)
+        
         self.lastDir = "/var/log"
         self.monitors = []
-        self.filter = {
-            "errors": ["error", "fail", "badness"], 
-            "warnings": ["warning", "cannot", "can't", "unable"]
-        }
         self.currentPage = None
         self.tab = QTabWidget(self)
         self.settingsDlg = SettingsDlg(self)
+        self.cfg = LoviConfig().getInstance()
+        
         self.setCentralWidget(self.tab)
         self.connect(self.tab, SIGNAL("currentChanged(QWidget *)"), 
             self.onPageChange)
@@ -308,7 +306,7 @@ class MainWin(KMainWindow):
         self.currentPage.close()
         self.tab.removePage(self.currentPage)
         self.displayStatus(False, "")
-        self.updateConfig()
+        self.saveFileList()
         if len(self.monitors) == 0:
             # Update interface when the last page is deleted
             self.setCaption(makeCaption("(none)"))
@@ -343,9 +341,9 @@ class MainWin(KMainWindow):
     
     def onSettings(self, id = -1):
         """Display settings dialog"""
-        if KConfigDialog.showDialog("settings"):
-            return
-        self.settingsDlg.show()
+        if self.settingsDlg.exec_loop():
+            self.cfg.writeConfig()
+            self.cfg.processConfig()
         
     def onPageChange(self, page):
         """Update widget when the top level tab changes."""
@@ -383,7 +381,7 @@ class MainWin(KMainWindow):
                 str(i18n("Cannot open file for monitoring:\n%s")) % 
                     fileName, makeCaption("Error"))
             return
-        mon = Monitor(self.tab, tailer, self.filter)
+        mon = Monitor(self.tab, tailer)
         base = os.path.basename(fileName)
         self.monitors.append(mon)
         self.tab.addTab(mon, base)
@@ -392,7 +390,7 @@ class MainWin(KMainWindow):
         self.setCaption(makeCaption(base))
         self.displayStatus(False, str(i18n("Monitoring %s")) % fileName)
         self.connect(self.timer, SIGNAL("timeout()"), mon.follow)
-        self.updateConfig()
+        self.saveFileList()
         self.connect(mon.getTextWidget(), SIGNAL("copyAvailable(bool)"), 
             self.onCopyAvailable)
         self.closeAction.setEnabled(True)
@@ -401,7 +399,7 @@ class MainWin(KMainWindow):
         self.selectAllAction.setEnabled(True)
         self.addBookmarkAction.setEnabled(True)
         
-    def updateConfig(self):
+    def saveFileList(self):
         """Update the list of monitored files in the configuration file."""
         files = []
         for mon in self.monitors:
@@ -416,13 +414,37 @@ class LoviConfig:
 
     class LoviConfig_(KConfigSkeleton):
         """Configuration information""" 
+        
+        WARNINGS = "warning, can't, cannot, unable"
+        ERRORS = "error, fail, badness"
+        
         def __init__(self, *args):
             KConfigSkeleton.__init__(self, *args)
+            
+            self.filterErrorList = []
+            self.filterWarningList = []
+            
             self.setCurrentGroup("Font")
             self.fontDefault = self.addItemBool("fontDefault", True)
             self.fontFixed = self.addItemBool("fontFixed", False)
             self.fontCustom = self.addItemBool("fontCustom", False)
+            self.setCurrentGroup("Filters")
+            self.filterErrorsVal = QString()
+            self.filterErrors = self.addItemString("filterErrors",
+                self.filterErrorsVal, LoviConfig.LoviConfig_.ERRORS)
+            self.filterWarningsVal = QString()
+            self.filterWarnings = self.addItemString("filterWarnings",
+                self.filterWarningsVal, LoviConfig.LoviConfig_.WARNINGS)
             self.readConfig()
+            self.processConfig()
+            
+        def processConfig(self):
+            self.filterErrorList = []
+            for s in str(self.filterErrorsVal).split(","):
+                self.filterErrorList.append(s.strip())
+            self.filterWarningList = []
+            for s in str(self.filterWarningsVal).split(","):
+                self.filterWarningList.append(s.strip())
 
     instance_ = None
 
@@ -438,33 +460,54 @@ class SettingsDlg(KConfigDialog):
     """Settings dialog"""
     
     def __init__(self, parent):
+    
+        print "SettingsDlg.__init__"
+    
+        cfg = LoviConfig().getInstance()
         
         KConfigDialog.__init__(self, parent, "settings",
-            LoviConfig().getInstance(), KDialogBase.IconList, 
-            KDialogBase.Ok | KDialogBase.Apply | KDialogBase.Cancel)
+            cfg, KDialogBase.IconList, KDialogBase.Ok | KDialogBase.Cancel)
             
+        print "  font"
         font = QWidget(self, "Font")
+
         box = QVBoxLayout(font, 3, 3)
         fontGrp = QVButtonGroup("", font)
         fontGrp.setFrameStyle(QFrame.NoFrame)
-        kcfg_fontDefault = \
+        self.kcfg_fontDefault = \
             QRadioButton(i18n("Default font"), fontGrp, "kcfg_fontDefault")
-        kcfg_fontFixed = \
+        self.kcfg_fontFixed = \
             QRadioButton(i18n("Default fixed font"), fontGrp, "kcfg_fontFixed")
-        kcfg_fontCustom = \
+        self.kcfg_fontCustom = \
             QRadioButton(i18n("Custom:"), fontGrp, "kcfg_fontCustom")
         fontGrp.setExclusive(True)
         box.addWidget(fontGrp)
         fontChooser = KFontChooser(font, "", False, QStringList(), False)
         box.addWidget(fontChooser)
         
-        filters = QWidget(None, "filters")
+        print "  filters"
+        filters = QWidget(self, "filters")
+        
+        box = QGridLayout(filters, 3, 2, 3, 7)
+        box.addWidget(QLabel(i18n("Errors:"), filters), 0, 0)
+        self.kcfg_filterErrors = QLineEdit(cfg.filterErrorsVal, filters, 
+            "kcfg_filterErrors")
+        box.addWidget(self.kcfg_filterErrors, 0, 1)
+        box.addWidget(QLabel(i18n("Warnings:"), filters), 1, 0)
+        self.kcfg_filterWarnings = QLineEdit(cfg.filterWarningsVal, 
+            filters, "kcfg_filterWarnings")
+        box.addWidget(self.kcfg_filterWarnings, 1, 1)
+        box.setRowStretch(2, 1)
 
-        actions = QWidget(None, "actions")
+        print "  actions"
+        actions = QWidget(self, "actions")
 
+        print "  add pages"
         self.addPage(font, i18n("Font"), "fonts")
         self.addPage(filters, i18n("Filters"), "2downarrow")
         self.addPage(actions, i18n("Alarms"), "kalarm")
+        
+        print "ConfigDialog.__init__ end"
 
 def main():
 
