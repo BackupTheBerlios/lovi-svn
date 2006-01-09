@@ -55,6 +55,7 @@ class Tail:
     by Ed Pascoe (2003)."""
 
     LINES_BACK = 400
+    LINES_AT_ONCE = 300
 
     def __init__(self, fileName):
         self.fileName = fileName
@@ -103,7 +104,7 @@ class Tail:
             ret = self.start()
             self.started = True
         
-        while 1:
+        for cnt in range(0, Tail.LINES_AT_ONCE):
             where = self.fd.tell()
             line = self.fd.readline()
             if not line:
@@ -136,7 +137,7 @@ class Monitor(QWidget):
 
     """File monitor widget."""
 
-    MAX_LOG_LINES = 5000
+    MAX_LOG_LINES = 1000
     
     def __init__(self, parent, tailer):
         QWidget.__init__(self, parent, "")
@@ -461,14 +462,11 @@ class SettingsDlg(KConfigDialog):
     
     def __init__(self, parent):
     
-        print "SettingsDlg.__init__"
-    
         cfg = LoviConfig().getInstance()
         
         KConfigDialog.__init__(self, parent, "settings",
             cfg, KDialogBase.IconList, KDialogBase.Ok | KDialogBase.Cancel)
             
-        print "  font"
         font = QWidget(self, "Font")
 
         box = QVBoxLayout(font, 3, 3)
@@ -485,7 +483,6 @@ class SettingsDlg(KConfigDialog):
         fontChooser = KFontChooser(font, "", False, QStringList(), False)
         box.addWidget(fontChooser)
         
-        print "  filters"
         filters = QWidget(self, "filters")
         
         box = QGridLayout(filters, 3, 2, 3, 7)
@@ -499,15 +496,11 @@ class SettingsDlg(KConfigDialog):
         box.addWidget(self.kcfg_filterWarnings, 1, 1)
         box.setRowStretch(2, 1)
 
-        print "  actions"
         actions = QWidget(self, "actions")
 
-        print "  add pages"
         self.addPage(font, i18n("Font"), "fonts")
         self.addPage(filters, i18n("Filters"), "2downarrow")
         self.addPage(actions, i18n("Alarms"), "kalarm")
-        
-        print "ConfigDialog.__init__ end"
 
 def main():
 
