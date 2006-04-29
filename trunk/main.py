@@ -416,7 +416,7 @@ class LoviConfig:
     class LoviConfig_(KConfigSkeleton):
         """Configuration information""" 
         
-        WARNINGS = "warning, can't, cannot, unable"
+        WARNINGS = "warn, can't, cannot, unable"
         ERRORS = "error, fail, badness"
         
         def __init__(self, *args):
