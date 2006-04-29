@@ -59,8 +59,8 @@ class Tail:
     Based on code contributed to Python Cookbook by Ed Pascoe (2003).
     """
 
-    LINES_BACK = 400
-    LINES_AT_ONCE = 300
+    LINES_BACK = 700
+    LINES_AT_ONCE = 700
 
     def __init__(self, fileName):
         self.fileName = fileName
@@ -224,7 +224,7 @@ class MainWin(KMainWindow):
 
     SB_TEXT = 1
     SB_TIMEOUT = 10000
-    MON_TIMEOUT = 3000
+    MON_TIMEOUT = 1000
     CHANGE_TIMEOUT = 3001
 
     def __init__(self, *args):
