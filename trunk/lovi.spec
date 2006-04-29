@@ -17,11 +17,10 @@ Lovi is a log file monitor for the K Desktop Environment.
 %build
 
 %install
-rm -rf $RPM_BUILD_ROOT
 make install DESTDIR=$RPM_BUILD_ROOT
 
 %clean
-rm -rf $RPM_BUILD_ROOT
+make clean DESTDIR=$RPM_BUILD_ROOT
 
 %files
 /usr/bin/lovi
