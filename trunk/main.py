@@ -534,7 +534,7 @@ class SettingsDlg(KConfigDialog):
 
         self.addPage(fontPage, i18n("Font"), "fonts")
         self.addPage(filtersPage, i18n("Filters"), "2downarrow")
-        self.addPage(actionsPage, i18n("Alarms"), "kalarm")
+        # self.addPage(actionsPage, i18n("Alarms"), "kalarm")
 
 
 def main():
