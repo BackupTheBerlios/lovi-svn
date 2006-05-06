@@ -551,7 +551,7 @@ def main():
     """Main program."""
 
     description = str(i18n("Simple log file viewer"))
-    version = "0.2"
+    version = "0.3"
     about = KAboutData("lovi", "lovi", version, description,
         KAboutData.License_GPL, "Copyright (C) 2005-2006 by Akos Polster")
     about.addAuthor("Akos Polster", "", "akos@pipacs.com")
