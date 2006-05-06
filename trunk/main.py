@@ -5,7 +5,7 @@ Simple log file viewer.
 """
 
 """
-Copyright (c) 2005 by Akos Polster
+Copyright (c) 2005-2006 by Akos Polster
 
 Terms and Conditions
 
@@ -36,9 +36,10 @@ copyright holder.
 import datetime
 import os
 import sys
-from qt import QButtonGroup, QFont, QFrame, QGridLayout, QLabel, QLineEdit, \
-    QPopupMenu, QRadioButton, QSize, QString, QStringList, Qt, QTabWidget, \
-    QTextEdit, QTimer, QVBoxLayout, QVButtonGroup, QWhatsThis, QWidget, SIGNAL
+from qt import QButtonGroup, QFont, QFrame, QGridLayout, QIconSet, QLabel, \
+    QLineEdit, QPopupMenu, QRadioButton, QSize, QString, QStringList, Qt, \
+    QTabWidget, QTextEdit, QTimer, QVBoxLayout, QVButtonGroup, QWhatsThis, \
+    QWidget, SIGNAL
 from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, \
     KConfigSkeleton, KGlobalSettings, KIcon, KIconLoader
 from kdeui import KConfigDialog, KDialogBase, KFontChooser, KMainWindow, \
@@ -236,6 +237,9 @@ class MainWin(KMainWindow):
         self.tab = QTabWidget(self)
         self.settingsDlg = SettingsDlg(self)
         self.cfg = LoviConfig().getInstance()
+        self.bellIcon = \
+            QIconSet(KIconLoader().loadIcon("idea", KIcon.Small, 11))
+        self.noIcon = QIconSet()
         
         self.setCentralWidget(self.tab)
         self.connect(self.tab, SIGNAL("currentChanged(QWidget *)"), 
@@ -373,10 +377,13 @@ class MainWin(KMainWindow):
         self.currentPage = page
         self.setCaption(makeCaption(os.path.basename(page.getFileName())))
         self.copyAction.setEnabled(page.getTextWidget().hasSelectedText())
+        # self.tab.setTabIconSet(page, self.noIcon)
                         
     def onStatusTimeout(self):
         """Clear status bar on timeout."""
         self.displayStatus(False, "")
+        for m in self.monitors:
+            self.tab.setTabIconSet(m, self.noIcon)
         
     def onChangeTimeout(self):
         """Look for changes in monitored files. """
@@ -384,6 +391,7 @@ class MainWin(KMainWindow):
         for m in self.monitors:
             if m.isChanged():
                 changeList.append(os.path.basename(m.getFileName()))
+                self.tab.setTabIconSet(m, self.bellIcon)
         if len(changeList):
             msg = changeList[0]
             for f in changeList[1:]:
@@ -409,6 +417,7 @@ class MainWin(KMainWindow):
         self.monitors.append(mon)
         self.tab.addTab(mon, base)
         self.tab.showPage(mon)
+        self.tab.setTabToolTip(mon, fileName)
         self.currentPage = mon
         self.setCaption(makeCaption(base))
         self.displayStatus(False, str(i18n("Monitoring %s")) % fileName)
@@ -530,7 +539,7 @@ class SettingsDlg(KConfigDialog):
         box.addWidget(self.kcfg_filterWarnings, 1, 1)
         box.setRowStretch(2, 1)
 
-        actionsPage = QWidget(self, "actions")
+        # actionsPage = QWidget(self, "actions")
 
         self.addPage(fontPage, i18n("Font"), "fonts")
         self.addPage(filtersPage, i18n("Filters"), "2downarrow")
