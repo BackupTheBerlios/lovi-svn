@@ -42,8 +42,8 @@ from qt import QButtonGroup, QFont, QFrame, QGridLayout, QIconSet, QLabel, \
     QWidget, SIGNAL
 from kdecore import i18n, KApplication, KAboutData, KCmdLineArgs, \
     KConfigSkeleton, KGlobalSettings, KIcon, KIconLoader
-from kdeui import KConfigDialog, KDialogBase, KFontChooser, KMainWindow, \
-    KMessageBox, KStdAction
+from kdeui import KConfigDialog, KDialogBase, KEdFind, KFontChooser, \
+    KMainWindow, KMessageBox, KStdAction
 from kfile import KFileDialog
 
 
@@ -140,26 +140,25 @@ class Tail:
         return changed
 
 
-class Monitor(QWidget):
+class Monitor(QTextEdit):
 
     """File monitor widget."""
 
     MAX_LOG_LINES = 1000
     
     def __init__(self, parent, tailer):
-        QWidget.__init__(self, parent, "")
+        QTextEdit.__init__(self, parent, "")
         self.tailer = tailer
         self.cfg = LoviConfig().getInstance()
-        self.log = QTextEdit(self)
-        layout = QGridLayout(self, 1, 1)
-        layout.addWidget(self.log, 0, 0)
-        self.log.setTextFormat(QTextEdit.LogText)
-        self.log.setMaxLogLines(Monitor.MAX_LOG_LINES)
+        self.setTextFormat(QTextEdit.LogText)
+        self.setMaxLogLines(Monitor.MAX_LOG_LINES)
         self.follow()
-        QWhatsThis.add(self.log, 
+        QWhatsThis.add(self, 
             str(i18n("<qt>This page is monitoring changes to <b>%s</b></qt>")) 
                 % self.tailer.getFileName())
         self.reconfigure()
+        self.findIndex = 0
+        self.findPara = 0
         
     def follow(self):
 
@@ -184,7 +183,7 @@ class Monitor(QWidget):
             elif hasWarnings:
                 line = '<font color="blue">' + line + '</font>'
                     
-            self.log.append(line)
+            self.append(line)
             
     def getFileName(self):
         return self.tailer.getFileName()
@@ -192,18 +191,42 @@ class Monitor(QWidget):
     def isChanged(self):
         return self.tailer.isChanged()
         
-    def getTextWidget(self):
-        """Return the text widget containing the log file changes."""
-        return self.log
-    
     def reconfigure(self):
         """Update with configuration changes."""
         if self.cfg.fontDefault[0].property().toInt():
-            self.log.setFont(KGlobalSettings.generalFont())
+            self.setFont(KGlobalSettings.generalFont())
         elif self.cfg.fontFixed[0].property().toInt():
-            self.log.setFont(KGlobalSettings.fixedFont())
+            self.setFont(KGlobalSettings.fixedFont())
         else:
-            self.log.setFont(self.cfg.font.property().toFont())
+            self.setFont(self.cfg.font.property().toFont())
+            
+    def find(self, text, caseSensitive, backward):
+        """Find text."""
+        if self.hasSelectedText():
+            paraFrom, indexFrom, paraTo, indexTo = self.getSelection(0)
+            if backward:
+                if indexFrom == 0:
+                    if para == 0:
+                        index = 0
+                        para = 0
+                    else:
+                        para = para - 1
+                        index = self.paragraphLength(para) - 1
+                else:
+                    index = indexFrom - 1
+                    para = paraFrom
+            else:
+                index = indexTo
+                para = paraTo
+        else:
+            if backward:
+                para = self.paragraphs() - 1
+                index = self.paragraphLength(para) - 1
+            else:
+                index = 0
+                para = 0
+        QTextEdit.find(self, text, caseSensitive, False, not backward, 
+            para, index)
 
 
 class BellButton(QLabel):
@@ -240,6 +263,8 @@ class MainWin(KMainWindow):
         self.bellIcon = \
             QIconSet(KIconLoader().loadIcon("idea", KIcon.Small, 11))
         self.noIcon = QIconSet()
+        self.findDlg = KEdFind(self, "find", False)
+        self.connect(self.findDlg, SIGNAL("search()"), self.doFind)
         
         self.setCentralWidget(self.tab)
         self.connect(self.tab, SIGNAL("currentChanged(QWidget *)"), 
@@ -274,6 +299,12 @@ class MainWin(KMainWindow):
             KStdAction.addBookmark(self.onAddBookmark, actions)
         self.addBookmarkAction.setEnabled(False)
         self.settingsAction = KStdAction.preferences(self.onSettings, actions)
+        self.findAction = KStdAction.find(self.onFind, actions)
+        self.findAction.setEnabled(False)
+        self.findNextAction = KStdAction.findNext(self.onFindNext, actions)
+        self.findNextAction.setEnabled(False)
+        self.findPrevAction = KStdAction.findPrev(self.onFindPrev, actions)
+        self.findPrevAction.setEnabled(False)
         
         # Initialize menus
         
@@ -290,6 +321,10 @@ class MainWin(KMainWindow):
         editMenu.insertSeparator()
         self.selectAllAction.plug(editMenu)
         self.addBookmarkAction.plug(editMenu)
+        editMenu.insertSeparator()
+        self.findAction.plug(editMenu)
+        self.findNextAction.plug(editMenu)
+        self.findPrevAction.plug(editMenu)
         self.menuBar().insertItem(i18n("&Edit"), editMenu)
         
         settingsMenu = QPopupMenu(self)
@@ -340,6 +375,9 @@ class MainWin(KMainWindow):
             self.selectAllAction.setEnabled(False)
             self.clearAction.setEnabled(False)
             self.addBookmarkAction.setEnabled(False)
+            self.findAction.setEnabled(False)
+            self.findNextAction.setEnabled(False)
+            self.findPrevAction.setEnabled(False)
 
     def onQuit(self, id = -1):
         """Quit application."""
@@ -347,15 +385,15 @@ class MainWin(KMainWindow):
         
     def onCopy(self, id = -1):
         """Copy text to clipboard."""
-        self.currentPage.getTextWidget().copy()
+        self.currentPage.copy()
         
     def onClear(self, id = -1):
         """Clear text window."""
-        self.currentPage.getTextWidget().setText("")
+        self.currentPage.setText("")
         
     def onSelectAll(self, id = -1):
         """Select all text."""
-        self.currentPage.getTextWidget().selectAll(True)
+        self.currentPage.selectAll(True)
         
     def onAddBookmark(self, id = -1):
         """Add a bookmark to the log."""
@@ -363,7 +401,7 @@ class MainWin(KMainWindow):
         bookmark += datetime.datetime.now().strftime("%b %d %H:%M:%S ")
         bookmark += "--------------------------------------------------------"
         bookmark += "</font>"
-        self.currentPage.getTextWidget().append(bookmark)
+        self.currentPage.append(bookmark)
     
     def onSettings(self, id = -1):
         """Display settings dialog"""
@@ -376,7 +414,7 @@ class MainWin(KMainWindow):
         """Update widget when the top level tab changes."""
         self.currentPage = page
         self.setCaption(makeCaption(os.path.basename(page.getFileName())))
-        self.copyAction.setEnabled(page.getTextWidget().hasSelectedText())
+        self.copyAction.setEnabled(page.hasSelectedText())
         # self.tab.setTabIconSet(page, self.noIcon)
                         
     def onStatusTimeout(self):
@@ -402,6 +440,23 @@ class MainWin(KMainWindow):
     def onCopyAvailable(self, available):
         """Update Copy menu item when there is a selection available."""
         self.copyAction.setEnabled(available)
+        
+    def onFind(self):
+        self.findDlg.show()
+    
+    def onFindPrev(self):
+        if self.findDlg.getText() == "":
+            self.onFind()
+        else:
+            self.currentPage.find(self.findDlg.getText(), 
+                self.findDlg.case_sensitive(), True)
+    
+    def onFindNext(self):
+        if self.findDlg.getText() == "":
+            self.onFind()
+        else:
+            self.currentPage.find(self.findDlg.getText(), 
+                self.findDlg.case_sensitive(), False)
 
     def monitor(self, fileName):
         """Start monitoring a file."""
@@ -423,13 +478,15 @@ class MainWin(KMainWindow):
         self.displayStatus(False, str(i18n("Monitoring %s")) % fileName)
         self.connect(self.timer, SIGNAL("timeout()"), mon.follow)
         self.saveFileList()
-        self.connect(mon.getTextWidget(), SIGNAL("copyAvailable(bool)"), 
-            self.onCopyAvailable)
+        self.connect(mon, SIGNAL("copyAvailable(bool)"), self.onCopyAvailable)
         self.closeAction.setEnabled(True)
         self.copyAction.setEnabled(False)
         self.clearAction.setEnabled(True)
         self.selectAllAction.setEnabled(True)
         self.addBookmarkAction.setEnabled(True)
+        self.findAction.setEnabled(True)
+        self.findNextAction.setEnabled(True)
+        self.findPrevAction.setEnabled(True)
         
     def saveFileList(self):
         """Update the list of monitored files in the configuration file."""
@@ -444,7 +501,11 @@ class MainWin(KMainWindow):
         """Update self with configuration changes."""
         for mon in self.monitors:
             mon.reconfigure()
-        
+            
+    def doFind(self):
+        self.currentPage.find(self.findDlg.getText(), 
+            self.findDlg.case_sensitive(), self.findDlg.get_direction())
+
 
 class LoviConfig:
 
